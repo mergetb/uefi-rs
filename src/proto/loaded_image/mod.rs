@@ -13,9 +13,9 @@ use crate::{
     unsafe_guid, Handle, Status,
 };
 use core::{ffi::c_void, str};
-use alloc_api::boxed::Box;
 
 #[cfg(feature = "exts")]
+use alloc_api::boxed::Box;
 
 /// The Loaded Image protocol. This can be opened on any image handle using the `HandleProtocol` boot service.
 #[repr(C)]

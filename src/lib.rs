@@ -23,14 +23,13 @@
 //! For example, a PC with no network card might not contain a network driver,
 //! therefore all the network protocols will be unavailable.
 
-#![cfg_attr(feature = "exts", feature(allocator_api, alloc_layout_extra))]
+#![cfg_attr(feature = "exts", feature(allocator_api, alloc_layout_extra, new_uninit))]
 #![feature(auto_traits)]
 #![feature(try_trait)]
 #![feature(abi_efiapi)]
 #![feature(negative_impls)]
 #![feature(const_fn)]
 #![feature(const_panic)]
-#![feature(new_uninit)]
 #![no_std]
 // Enable some additional warnings and lints.
 #![warn(missing_docs, unused)]
