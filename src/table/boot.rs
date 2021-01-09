@@ -90,8 +90,13 @@ pub struct BootServices {
             source_size: usize,
             image_handle: *mut Handle,
         ) -> Status,
+    start_image:
+        extern "efiapi" fn(
+            handle: Handle,
+            exit_data_size: *mut usize,
+            exit_data: *mut *mut c_void,
+        ) -> Status,
 
-    start_image: usize,
     exit: usize,
     unload_image: usize,
     exit_boot_services:
@@ -384,11 +389,11 @@ impl BootServices {
     /// provides no mechanism to protect against concurrent usage. Such
     /// protections must be implemented by user-level code, for example via a
     /// global `HashSet`.
-    pub fn handle_protocol<P: Protocol>(&self, handle: Handle) -> Result<&UnsafeCell<P>> {
+    pub fn handle_protocol<P: Protocol>(&self, handle: Handle) -> Result<&mut UnsafeCell<P>> {
         let mut ptr = ptr::null_mut();
         (self.handle_protocol)(handle, &P::GUID, &mut ptr).into_with_val(|| {
             let ptr = ptr as *mut P as *mut UnsafeCell<P>;
-            unsafe { &*ptr }
+            unsafe { &mut *ptr }
         })
     }
 
@@ -460,6 +465,20 @@ impl BootServices {
             source_size,
             image_handle,
         ).into()
+
+    }
+
+    /// Starts an image
+    /// 
+    /// TODO(ry) document
+    pub fn start_image(
+        &self,
+        handle: Handle,
+        exit_data_size: *mut usize,
+        exit_data: *mut *mut c_void,
+    ) -> Result {
+
+        (self.start_image)(handle, exit_data_size, exit_data).into()
 
     }
 

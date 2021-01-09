@@ -16,7 +16,6 @@ use core::{ffi::c_void, str};
 use alloc_api::boxed::Box;
 
 #[cfg(feature = "exts")]
-use alloc_api::{alloc::Layout, alloc::LayoutError};
 
 /// The Loaded Image protocol. This can be opened on any image handle using the `HandleProtocol` boot service.
 #[repr(C)]
@@ -77,20 +76,15 @@ impl LoadedImage {
 
     /// Set the load options of the given image.
     #[cfg(feature = "exts")]
-    pub fn set_load_options(&self, s: &str) -> Result<(), LayoutError> {
+    pub fn set_load_options(&mut self, s: &str) -> Result<(), LoadOptionsError> {
 
+        let mut buf = unsafe{ Box::<[u16]>::new_uninit_slice(s.len()).assume_init() };
 
-        /*
-        let buf = Box::into_raw(
-            crate::exts::allocate_buffer(
-                Layout::from_size_align(s.len()*2, 4)?
-            )
-        ) as *mut u16;
-        */
+        let len = ucs2::encode(s, &mut *buf).map_err(|_| LoadOptionsError::BufferTooSmall)?;
 
-        let buf = Box::<[u16]>::new_uninit_slice(s.len());
-
-        //self.load_options =  r;
+        let opts = Box::into_raw(buf) as *const Char16;
+        self.load_options = opts;
+        self.load_options_size = len as u32;
 
         Ok(())
 
