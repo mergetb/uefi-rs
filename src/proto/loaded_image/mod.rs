@@ -4,7 +4,7 @@
 //! used to emulate `EFI_DEVICE_PATH_PROTOCOL`.
 
 mod device_path;
-pub use self::device_path::DevicePath;
+pub use self::device_path::{DevicePath, URIDevicePath, DeviceType, DeviceSubType};
 
 use crate::{
     data_types::{CStr16, Char16},
@@ -13,6 +13,10 @@ use crate::{
     unsafe_guid, Handle, Status,
 };
 use core::{ffi::c_void, str};
+use alloc_api::boxed::Box;
+
+#[cfg(feature = "exts")]
+use alloc_api::{alloc::Layout, alloc::LayoutError};
 
 /// The Loaded Image protocol. This can be opened on any image handle using the `HandleProtocol` boot service.
 #[repr(C)]
@@ -69,6 +73,27 @@ impl LoadedImage {
                 ucs2::decode(ucs2_slice, buffer).map_err(|_| LoadOptionsError::BufferTooSmall)?;
             str::from_utf8(&buffer[0..length]).map_err(|_| LoadOptionsError::NotValidUtf8)
         }
+    }
+
+    /// Set the load options of the given image.
+    #[cfg(feature = "exts")]
+    pub fn set_load_options(&self, s: &str) -> Result<(), LayoutError> {
+
+
+        /*
+        let buf = Box::into_raw(
+            crate::exts::allocate_buffer(
+                Layout::from_size_align(s.len()*2, 4)?
+            )
+        ) as *mut u16;
+        */
+
+        let buf = Box::<[u16]>::new_uninit_slice(s.len());
+
+        //self.load_options =  r;
+
+        Ok(())
+
     }
 
     /// Returns the base address and the size in bytes of the loaded image.

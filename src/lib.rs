@@ -30,6 +30,7 @@
 #![feature(negative_impls)]
 #![feature(const_fn)]
 #![feature(const_panic)]
+#![feature(new_uninit)]
 #![no_std]
 // Enable some additional warnings and lints.
 #![warn(missing_docs, unused)]

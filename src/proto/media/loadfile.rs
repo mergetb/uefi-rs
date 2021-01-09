@@ -21,6 +21,8 @@ pub struct LoadFile<T> {
 }
 
 impl<T> LoadFile<T> {
+
+    /// Load a file from a media device.
     pub fn load_file(
         &mut self, root: &mut T, p: bool, bs: &mut u64, buf: *mut c_void) -> Result<()> {
 
@@ -28,6 +30,7 @@ impl<T> LoadFile<T> {
             .into_with_val(|| () )
 
     }
+
 }
 
 /// The devices specific path of a file. Can take a number of forms as

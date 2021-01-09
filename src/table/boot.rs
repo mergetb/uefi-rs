@@ -81,7 +81,16 @@ pub struct BootServices {
     install_configuration_table: usize,
 
     // Image services
-    load_image: usize,
+    load_image:
+        extern "efiapi" fn(
+            boot_policy: bool, 
+            parent_image_handle: Handle,
+            device_path: *const DevicePath,
+            source_buffer: *const c_void,
+            source_size: usize,
+            image_handle: *mut Handle,
+        ) -> Status,
+
     start_image: usize,
     exit: usize,
     unload_image: usize,
@@ -428,6 +437,30 @@ impl BootServices {
             (self.locate_device_path)(&P::GUID, &mut device_path_ptr, &mut handle)
                 .into_with_val(|| handle)
         }
+    }
+
+    /// Loads an image
+    ///
+    /// TODO(ry) document
+    pub fn load_image(
+        &self,
+        boot_policy: bool, 
+        parent_image_handle: Handle,
+        device_path: *const DevicePath,
+        source_buffer: *const c_void,
+        source_size: usize,
+        image_handle: *mut Handle,
+    ) -> Result {
+
+        (self.load_image)(
+            boot_policy,
+            parent_image_handle,
+            device_path,
+            source_buffer,
+            source_size,
+            image_handle,
+        ).into()
+
     }
 
     /// Exits the UEFI boot services

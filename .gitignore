@@ -3,3 +3,5 @@
 
 # Libraries should not commit their .lock files.
 Cargo.lock
+
+*.sw*
