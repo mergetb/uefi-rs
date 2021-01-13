@@ -31,3 +31,5 @@ pub mod debug;
 pub mod loaded_image;
 pub mod media;
 pub mod pi;
+pub mod dhcp4;
+pub mod ip4_config2;

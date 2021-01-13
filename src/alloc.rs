@@ -101,4 +101,4 @@ unsafe impl GlobalAlloc for Allocator {
 }
 
 #[global_allocator]
-static ALLOCATOR: Allocator = Allocator;
+pub static ALLOCATOR: Allocator = Allocator;

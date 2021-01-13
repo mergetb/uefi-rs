@@ -23,16 +23,18 @@
 //! For example, a PC with no network card might not contain a network driver,
 //! therefore all the network protocols will be unavailable.
 
-#![cfg_attr(feature = "exts", feature(allocator_api, alloc_layout_extra, new_uninit))]
+#![cfg_attr(feature = "exts", feature(allocator_api, ptr_internals, alloc_layout_extra, new_uninit))]
 #![feature(auto_traits)]
 #![feature(try_trait)]
 #![feature(abi_efiapi)]
 #![feature(negative_impls)]
 #![feature(const_fn)]
 #![feature(const_panic)]
+//#![feature(ptr_internals)]
+//#![feature(allocator_api)]
 #![no_std]
 // Enable some additional warnings and lints.
-#![warn(missing_docs, unused)]
+//TODO REENABLE#![warn(missing_docs, unused)] TODO TODO TODO TODO <-------------------------- TODO
 #![deny(clippy::all)]
 
 // `uefi-exts` requires access to memory allocation APIs.
@@ -45,7 +47,7 @@ pub use self::data_types::{unsafe_guid, Identify};
 pub use self::data_types::{CStr16, CStr8, Char16, Char8, Event, Guid, Handle};
 
 mod result;
-pub use self::result::{Completion, Result, ResultExt, Status};
+pub use self::result::{Completion, Result, ResultExt, Status, Error};
 
 pub mod table;
 

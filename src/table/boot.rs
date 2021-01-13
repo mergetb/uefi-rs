@@ -298,6 +298,7 @@ impl BootServices {
         &self,
         event_ty: EventType,
         notify_tpl: Tpl,
+        //notify_fn: Option<impl FnMut(Event)>,
         notify_fn: Option<fn(Event)>,
     ) -> Result<Event> {
         // Prepare storage for the output Event
@@ -309,10 +310,12 @@ impl BootServices {
             notify_fn(e); // SAFETY: Aborting panics are assumed here
         }
         let (notify_func, notify_ctx) = notify_fn
+            //.map(|mut notify_fn| {
             .map(|notify_fn| {
                 (
                     Some(notify_trampoline as EventNotifyFn),
-                    notify_fn as fn(Event) as *mut c_void,
+                    //&mut notify_fn as &mut dyn FnMut(Event) as *mut _ as *mut c_void,
+                    notify_fn as fn(Event) as *mut c_void
                 )
             })
             .unwrap_or((None, ptr::null_mut()));
@@ -552,11 +555,11 @@ impl BootServices {
     /// Returns a protocol implementation, if present on the system.
     ///
     /// The caveats of `BootServices::handle_protocol()` also apply here.
-    pub fn locate_protocol<P: Protocol>(&self) -> Result<&UnsafeCell<P>> {
+    pub fn locate_protocol<P: Protocol>(&self) -> Result<&mut UnsafeCell<P>> {
         let mut ptr = ptr::null_mut();
         (self.locate_protocol)(&P::GUID, ptr::null_mut(), &mut ptr).into_with_val(|| {
             let ptr = ptr as *mut P as *mut UnsafeCell<P>;
-            unsafe { &*ptr }
+            unsafe { &mut *ptr }
         })
     }
 

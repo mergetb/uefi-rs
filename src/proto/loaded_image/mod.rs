@@ -4,7 +4,14 @@
 //! used to emulate `EFI_DEVICE_PATH_PROTOCOL`.
 
 mod device_path;
-pub use self::device_path::{DevicePath, URIDevicePath, DeviceType, DeviceSubType};
+/*
+pub use self::device_path::{
+    DevicePath, URIDevicePath, DeviceType, EndPathSubType, 
+    DevicePath2, ACPIDevicePath, DevicePath2T, DevicePathHeader,
+};
+*/
+
+pub use self::device_path::*;
 
 use crate::{
     data_types::{CStr16, Char16},
