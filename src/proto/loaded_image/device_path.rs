@@ -22,10 +22,8 @@ use alloc_api::{
     alloc::{
         alloc,
         Layout,
-        Global,
         GlobalAlloc,
     },
-    boxed::Box,
 };
 
 // Memory management ==========================================================
@@ -38,10 +36,31 @@ impl DevicePathBox {
         DevicePathBox{ ptr: unsafe { ptr::Unique::new_unchecked(p) } }
     }
 
+    pub fn as_ptr(&self) -> *const DevicePath {
+        self.ptr.as_ptr()
+    }
+
+}
+
+impl core::ops::Deref for DevicePathBox {
+
+    type Target = DevicePath;
+
+    fn deref(&self) -> &DevicePath {
+        unsafe { self.ptr.as_ref() }
+    }
+
+}
+
+impl core::ops::DerefMut for DevicePathBox {
+
+    fn deref_mut(&mut self) -> &mut DevicePath {
+        unsafe { self.ptr.as_mut() }
+    }
+
 }
 
 impl Drop for DevicePathBox {
-
 
     // https://doc.rust-lang.org/nomicon/destructors.html
     fn drop(&mut self) {
@@ -50,7 +69,8 @@ impl Drop for DevicePathBox {
             ALLOCATOR.dealloc(
                 self.ptr.as_mut() as *mut _ as *mut u8, 
                 Layout::new::<DevicePath>(),
-            )
+            );
+            //TODO drop the entire path
         }
     }
 
@@ -73,6 +93,11 @@ pub struct DevicePath {
     /// The device_type and sub_type determine the
     /// kind of data, and it size.
     pub length: [u8; 2],
+}
+
+pub struct DevicePathPayload<T> {
+    path: DevicePath,
+    payload: T
 }
 
 /// Device Path Utilities Protocol. Creates and manipulates device paths and 
@@ -125,10 +150,6 @@ pub enum DeviceType {
 pub enum EndPathSubType {
     /// End This Instance of a Device Path and start a new Device Path
     EndInstance = 0x01,
-    // /// Uniform Resource Identifier (URI RFC 3986)
-    // the UEFI spec presents these in decimal as oppsed to hex, not sure if we
-    // want to maintain that here or just put everything in hex.
-    //URI = 24, 
     /// End Entire Device Path
     EndEntire = 0xFF,
 }
@@ -213,18 +234,150 @@ pub enum BIOSBootSpecPathSubType {
 
 impl DevicePath {
     /// Create a new device path
-    pub fn new<T>(device_type: DeviceType, sub_type: u8, data: T) -> DevicePathBox {
+    pub fn new<T: Payload>(device_type: DeviceType, sub_type: u8, data: T) -> DevicePathBox {
 
-        let sz = size_of::<DevicePath>() + size_of::<T>();
+        let sz = size_of::<DevicePath>() + data.len();
         unsafe {
             let p = ptr::NonNull::new_unchecked(
-                alloc(Layout::from_size_align_unchecked(sz, 16))
+                alloc(Layout::from_size_align_unchecked(sz, 0))
             );
 
-            //Box::from_raw(p.as_ptr() as *mut DevicePath)
+            /*
+            // device type
+            ptr::write(p.as_ptr().cast(), device_type);
+
+            // sub_type
+            let mut off = size_of::<DeviceType>();
+            ptr::write(p.as_ptr().add(off).cast(), sub_type);
+
+            // length
+            off += size_of::<u8>();
+            ptr::write(p.as_ptr().add(off).cast(), 
+                (size_of::<DevicePath>() + size_of::<T>()) as u16);
+
+            // data
+            off += size_of::<[u8;2]>();
+            ptr::write(p.as_ptr().add(off).cast(), data);
+            */
+            Self::stamp(p.as_ptr(), device_type, sub_type, data);
+
             DevicePathBox::new(p.as_ptr() as *mut DevicePath)
         }
 
+    }
+
+    pub fn new1<A: Payload>(x: DevicePathPayload<A>) -> DevicePathBox {
+
+        // allocate enough space for the provide path plus the path ending
+        let xl = x.len();
+        let sz = x.len() + size_of::<DevicePath>();
+        unsafe {
+            let p = ptr::NonNull::new_unchecked(
+                alloc(Layout::from_size_align_unchecked(sz, 0))
+            );
+
+            Self::stamp(p.as_ptr(), x.path.device_type, x.path.sub_type, x.payload);
+            Self::stamp(
+                p.as_ptr().add(xl), 
+                DeviceType::End,
+                EndPathSubType::EndEntire as u8,
+                (),
+            );
+
+            DevicePathBox::new(p.as_ptr() as *mut DevicePath)
+        }
+
+    }
+
+    pub fn new2<A: Payload,B: Payload>(x: DevicePathPayload<A>, y: DevicePathPayload<B>) -> DevicePathBox {
+
+        // allocate enough space for the provide path plus the path ending
+        let xl = x.len();
+        let yl = y.len();
+        let sz = xl + yl + size_of::<DevicePath>();
+        unsafe {
+            let p = ptr::NonNull::new_unchecked(
+                alloc(Layout::from_size_align_unchecked(sz, 0))
+            );
+
+            Self::stamp(p.as_ptr(), x.path.device_type, x.path.sub_type, x.payload);
+            Self::stamp(
+                p.as_ptr().add(xl), 
+                y.path.device_type, 
+                y.path.sub_type, 
+                y.payload
+            );
+            Self::stamp(
+                p.as_ptr().add(xl+yl),
+                DeviceType::End,
+                EndPathSubType::EndEntire as u8,
+                (),
+            );
+
+            DevicePathBox::new(p.as_ptr() as *mut DevicePath)
+        }
+
+    }
+
+    pub fn append(a: &DevicePath, b: &DevicePath) -> DevicePathBox {
+
+        let mut alen = 0usize;
+        let mut blen = 0usize;
+
+        a.walk(&mut |x| alen += x.len());
+        b.walk(&mut |x| blen += x.len());
+
+        let len = alen + blen - size_of::<DevicePath>();
+
+        unsafe {
+            let p = ptr::NonNull::new_unchecked(
+                alloc(Layout::from_size_align_unchecked(len, 0))
+            );
+
+            let off = alen - size_of::<DevicePath>();
+            ptr::copy_nonoverlapping(
+                a as *const _ as *const u8,
+                p.as_ptr(),
+                off,
+            );
+            ptr::copy_nonoverlapping(
+                b as *const _ as *const u8,
+                p.as_ptr().add(off),
+                blen,
+            );
+
+            DevicePathBox::new(p.as_ptr() as *mut DevicePath)
+        }
+
+
+    }
+
+    fn stamp<T: Payload>(p: *mut u8, device_type: DeviceType, sub_type: u8, data: T) {
+        unsafe {
+            // device type
+            ptr::write(p.cast(), device_type);
+
+            // sub_type
+            let mut off = size_of::<DeviceType>();
+            ptr::write(p.add(off).cast(), sub_type);
+
+            // length
+            off += size_of::<u8>();
+            ptr::write(p.add(off).cast(), 
+                (size_of::<DevicePath>() + data.len()) as u16);
+
+            // data
+            off += size_of::<[u8;2]>();
+            //ptr::write(p.add(off).cast(), data);
+            if data.len() > 0 {
+                ptr::copy_nonoverlapping(
+                    data.ptr(),
+                    p.add(off) as *mut _ as *mut u8,
+                    data.len(),
+                );
+            }
+
+        }
     }
 
     pub fn payload<P>(&self) -> &P {
@@ -237,7 +390,7 @@ impl DevicePath {
 
     }
 
-    pub fn walk(&self, f: &dyn Fn(&DevicePath)) {
+    pub fn walk(&self, f: &mut dyn FnMut(&DevicePath)) {
 
         f(self);
         match self.next() {
@@ -280,6 +433,30 @@ impl DevicePath {
 
     }
 
+    pub fn len(&self) -> usize { u16::from_le_bytes(self.length) as usize }
+
+}
+
+impl<T: Payload> DevicePathPayload<T> {
+
+    pub fn create(device_type: DeviceType, sub_type: u8, payload: T) -> Self {
+
+        DevicePathPayload{
+            path: DevicePath {
+                device_type: device_type,
+                sub_type: sub_type,
+                length: ((size_of::<DevicePath>() + payload.len()) as u16).to_le_bytes(),
+            },
+            payload: payload,
+        }
+
+    }
+
+    pub fn len(&self) -> usize {
+        u16::from_le_bytes(self.path.length) as usize
+    }
+
+
 }
 
 // Device path utilities implementation =======================================
@@ -297,6 +474,23 @@ impl DevicePathUtilities {
 
 // Payloads ===================================================================
 
+// Common traits all payload types must implement, necessitated by the fact
+// that payloads have a packed representation but not all payloads are
+// necessarily sized at compile time.
+pub trait Payload {
+
+    fn len(&self) -> usize;
+    fn ptr(&self) -> *const u8;
+
+}
+
+impl Payload for () {
+
+    fn len(&self) -> usize { 0 }
+    fn ptr(&self) -> *const u8 { ptr::null() }
+
+}
+
 /// This Device Path contains ACPI Device IDs that represent a device’s Plug
 /// and Play Hardware ID and its corresponding unique persistent ID. The ACPI
 /// IDs are stored in the ACPI _HID, _CID, and _UID device identification
@@ -305,7 +499,7 @@ impl DevicePathUtilities {
 /// platform firmware to the operating system. Refer to the ACPI specification
 /// for a complete description of the.  _HID, _CID, and _UID device
 /// identification objects.
-#[repr(packed)]
+#[repr(C)]
 pub struct ACPIDevicePath {
     /// Device’s PnP hardware ID stored in a numeric 32-bit
     /// compressed EISA-type ID. This value must match the
@@ -319,28 +513,65 @@ pub struct ACPIDevicePath {
     pub uid: u32,
 }
 
-#[repr(packed)]
+impl Payload for ACPIDevicePath {
+
+    fn len(&self) -> usize { size_of::<Self>() }
+    fn ptr(&self) -> *const u8 { &self.hid as *const _ as *const u8 }
+}
+
+#[repr(C)]
 pub struct MACDevicePath {
-    address: [u8;32],
-    iftype: HardwareType,
+    pub address: [u8;32],
+    pub iftype: HardwareType,
 }
 
-#[repr(packed)]
+impl Payload for MACDevicePath {
+
+    fn len(&self) -> usize { size_of::<Self>() }
+    fn ptr(&self) -> *const u8 { &self.address as *const _ as *const u8 }
+}
+
+#[repr(C)]
 pub struct PCIDevicePath {
-    function: u8,
-    device: u8,
+    pub function: u8,
+    pub device: u8,
 }
 
-#[repr(packed)]
+impl Payload for PCIDevicePath {
+
+    fn len(&self) -> usize { size_of::<Self>() }
+    fn ptr(&self) -> *const u8 { &self.function as *const _ as *const u8 }
+}
+
+#[repr(C)]
 pub struct IPv4DevicePath {
-    local_ip: [u8;4],
-    remote_ip: [u8;4],
-    local_port: u16,
-    remote_port: u16,
-    protocol: IPProtocol,
-    static_ip: StaticIPAddr,
-    gateway_ip: [u8;4],
-    subnet_mask: [u8;4],
+    pub local_ip: [u8;4],
+    pub remote_ip: [u8;4],
+    pub local_port: u16,
+    pub remote_port: u16,
+    pub protocol: IPProtocol,
+    pub static_ip: StaticIPAddr,
+    pub gateway_ip: [u8;4],
+    pub subnet_mask: [u8;4],
+}
+
+impl Payload for IPv4DevicePath {
+
+    fn len(&self) -> usize { size_of::<Self>() }
+    fn ptr(&self) -> *const u8 { &self.local_ip as *const _ as *const u8 }
+
+}
+
+#[repr(C)]
+pub struct URIDevicePath {
+    pub uri: &'static str, //TODO probably non static lifetime better
+}
+
+impl Payload for URIDevicePath {
+
+    fn len(&self) -> usize { self.uri.len() }
+    fn ptr(&self) -> *const u8 { self.uri as *const _ as *const u8 }
+
 }
 
 #[repr(u8)]
@@ -555,6 +786,16 @@ impl core::fmt::Debug for DevicePath {
                                 let pl = self.payload::<MACDevicePath>();
                                 d.field("data", &pl);
                             }
+                            MessagingPathSubType::IPv4 => {
+                                let pl = self.payload::<IPv4DevicePath>();
+                                d.field("data", &pl);
+                            }
+                            MessagingPathSubType::URI => {
+                                /*
+                                let pl = self.payload::<URIDevicePath>();
+                                d.field("data", &pl);
+                                */
+                            }
                             _ => {}
                         }
                     },
@@ -607,7 +848,7 @@ impl core::fmt::Debug for ACPIDevicePath {
         //info!("ACPI ID: {}{}{}{:04X}", a, b, c, n);
 
         let hid = format!("{}{}{}{:X}", a, b, c, n);
-        let uid = unsafe { format!("{:X}", self.uid) };
+        let uid = format!("{:X}", self.uid);
         f.debug_struct("ACPIDevicePath")
             .field("hid", &hid)
             .field("uid", &uid)
@@ -643,18 +884,16 @@ impl core::fmt::Debug for IPv4DevicePath {
 
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 
-        unsafe {
-            f.debug_struct("IPv4DevicePath")
-                .field("local_ip", &self.local_ip)
-                .field("remote_ip", &self.remote_ip)
-                .field("local_port", &self.local_port)
-                .field("remote_port", &self.remote_port)
-                .field("protocol", &self.protocol)
-                .field("static_ip", &self.static_ip)
-                .field("gateway_ip", &self.gateway_ip)
-                .field("subnet_mask", &self.subnet_mask)
-                .finish()
-        }
+        f.debug_struct("IPv4DevicePath")
+            .field("local_ip", &self.local_ip)
+            .field("remote_ip", &self.remote_ip)
+            .field("local_port", &self.local_port)
+            .field("remote_port", &self.remote_port)
+            .field("protocol", &self.protocol)
+            .field("static_ip", &self.static_ip)
+            .field("gateway_ip", &self.gateway_ip)
+            .field("subnet_mask", &self.subnet_mask)
+            .finish()
 
     }
 
@@ -671,3 +910,17 @@ impl core::fmt::Debug for PCIDevicePath {
 
     }
 }
+
+/*
+impl core::fmt::Debug for URIDevicePath {
+
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+
+        f.debug_struct("URIDevicePath")
+            .field("uri", &self.uri)
+            .finish()
+
+    }
+
+}
+*/

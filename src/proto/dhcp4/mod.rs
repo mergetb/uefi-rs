@@ -8,6 +8,10 @@ use num_enum::{
     TryFromPrimitive,
     IntoPrimitive,
 };
+use alloc_api::{
+    format,
+    string::String,
+};
 
 /// The DHCP4 protocol is used to collect configuration information for the EFI
 /// IPv4 Protocol driver and provide DHCP server and PXE boot server directory
@@ -142,8 +146,16 @@ impl core::fmt::Debug for ConfigData {
 /// An IPv4 address as a sequence of bytes.
 pub type IPv4Address = [u8;4];
 
+pub fn show_ip(ip: &IPv4Address) -> String {
+    format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3])
+}
+
 /// A MAC address as a sequence of bytes
 pub type MacAddress = [u8;32];
+
+pub fn show_mac(m: &MacAddress) -> String {
+    format!("{:x}:{:x}:{:x}:{:x}:{:x}:{:x}", m[0], m[1], m[2], m[3], m[4], m[5])
+}
 
 /* XXX cannot do for type alias apparently and type MacAddress([u8;32]) does not
  * fly either

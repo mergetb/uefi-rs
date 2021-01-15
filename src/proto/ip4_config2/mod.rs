@@ -1,8 +1,18 @@
 //! IP4 config2 protocol
 
-use crate::proto::Protocol;
+use crate::proto::{
+    Protocol,
+    dhcp4::{
+        MacAddress,
+        IPv4Address
+    }
+};
 use crate::{unsafe_guid, Result, Status, Event};
-use core::ffi::c_void;
+use core::{
+    ptr,
+    ffi::c_void,
+};
+use log::info;
 
 /// The EFI_IP4_CONFIG2_PROTOCOL provides the mechanism to set and get various types of
 /// configurations for the EFI IPv4 network stack.
@@ -18,7 +28,12 @@ pub struct IP4Config2 {
         data: *const c_void,
     ) -> Status,
 
-    get_data: usize,
+    get_data: extern "efiapi" fn(
+        this: &mut IP4Config2,
+        data_type: DataType,
+        data_size: usize,
+        data: *mut c_void,
+    ) -> Status,
 
     register_data_notify: extern "efiapi" fn(
         this: &mut IP4Config2,
@@ -40,6 +55,14 @@ impl IP4Config2 {
     ) -> Result<()> {
 
         (self.set_data)(self, data_type, size, data).into()
+
+    }
+
+    pub fn get_data(
+        &mut self, data_type: DataType, size: usize, data: *mut c_void
+    ) -> Result<()> {
+
+        (self.get_data)(self, data_type, size, data).into()
 
     }
 
@@ -107,5 +130,54 @@ pub enum Policy {
   Dhcp,
   /// Identifies and upper bound on data types
   Maximum
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct InterfaceInfo {
+    pub name: [u16; 32],
+    pub iftype: u8,
+    pub hw_address_size: u32,
+    pub hw_address: MacAddress,
+    pub station_address: IPv4Address,
+    pub subnet_mask: IPv4Address,
+    pub route_table_size: u32,
+    pub route_table: *mut RouteTableEntry,
+}
+
+impl InterfaceInfo {
+
+    pub fn new() -> InterfaceInfo {
+        InterfaceInfo{
+            name: [0;32],
+            iftype: 0,
+            hw_address_size: 0,
+            hw_address: [0;32],
+            station_address: [0;4],
+            subnet_mask: [0;4],
+            route_table_size: 0,
+            route_table: ptr::null_mut(),
+        }
+    }
+
+    pub fn dump_route_table(&self) {
+
+        for i in 0..(self.route_table_size as usize) {
+
+            unsafe { 
+                info!("{:?}", &*self.route_table.add(i));
+            }
+
+        }
+
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct RouteTableEntry {
+    pub subnet_address: IPv4Address,
+    pub subnet_mask: IPv4Address,
+    pub gateway_address: IPv4Address,
 }
 
